@@ -27,7 +27,7 @@ bevy = { version = "0.15.3", default-features = false, features = [
     "png",
     "x11",
 ] }
-rodio = { version = "0.22.2", optional = true }
+rodio = { version = "0.17", optional = true }
 rand = "0.8"
 
 # Optimise release builds
