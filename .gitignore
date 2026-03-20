@@ -71,3 +71,8 @@ ehthumbs.db
 # OpenSpec drafts
 openspec/drafts/
 *.draft.md
+
+
+# Added by cargo
+
+/target

@@ -1,0 +1,44 @@
+[package]
+name = "resonance"
+version = "0.1.0"
+edition = "2021"
+description = "A 2D particle physics sonification engine"
+license = "MIT"
+
+[features]
+# Audio is enabled by default but can be disabled for dev builds without ALSA
+default = ["audio"]
+audio = ["dep:rodio"]
+
+[dependencies]
+# Bevy without built-in audio — we use rodio directly
+bevy = { version = "0.15.3", default-features = false, features = [
+    "bevy_asset",
+    "bevy_core_pipeline",
+    "bevy_gizmos",
+    "bevy_render",
+    "bevy_sprite",
+    "bevy_text",
+    "bevy_ui",
+    "bevy_winit",
+    "bevy_state",
+    "multi_threaded",
+    "default_font",
+    "png",
+    "x11",
+] }
+rodio = { version = "0.22.2", optional = true }
+rand = "0.8"
+
+# Optimise release builds
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+# Fast compilation in dev
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
