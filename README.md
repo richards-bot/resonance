@@ -1,124 +1,131 @@
-# Claude Code Project Template
+# Resonance
 
-A ready-to-use project template for building software with [Claude Code](https://code.claude.com/docs/en/setup). It gives Claude structured rules, slash commands, git hooks, and issue tracking out of the box so you can go from idea to working code in a single session.
+A 2D particle physics playground where **the physics generates the music**.
 
-## What's Included
+Spawn particles, place gravity wells, and watch collisions produce real-time sine tones tuned to an A minor pentatonic scale. Built with Rust + Bevy 0.15.
 
-- **CLAUDE.md** -- Instructions Claude follows automatically (coding style, commit format, workflow)
-- **Slash commands** -- `/brain-dump`, `/start-bead`, `/plan`, `/tdd`, `/checkpoint`, `/complete-bead`, `/code-review`, `/status`
-- **Beads issue tracking** -- Git-backed task tracking that persists across Claude Code sessions
-- **Hooks** -- Automated guardrails that enforce issue tracking before code changes
-- **Rules** -- Agent behavior, coding style, security, and testing standards in `.claude/rules/`
-- **OpenSpec** -- Lightweight feature specification workflow in `openspec/`
-- **Doc templates** -- `SPEC.md` and `DECISIONS.md` for project specs and architecture decisions
+---
 
-## Prerequisites
+## Download & Run
 
-- [Claude Code](https://code.claude.com/docs/en/setup) (`curl -fsSL https://claude.ai/install.sh | bash`)
-- [Beads](https://github.com/steveyegge/beads) (`npm install -g @beads/bd` or `brew install beads`)
-- [OpenSpec](https://openspec.dev/) (`npm install -g @fission-ai/openspec@latest`)
+Download the latest binary from the [Releases](../../releases/latest) page.
 
-## Quick Start
-
-### 1. Create your project
+### macOS (Apple Silicon)
 
 ```bash
-./setup.sh my-project
-cd ~/my-project
+curl -L https://github.com/YOUR_USERNAME/resonance/releases/latest/download/resonance-macos-arm64 -o resonance
+xattr -d com.apple.quarantine resonance   # remove quarantine flag
+chmod +x resonance
+./resonance
 ```
 
-This copies the template, initializes git, and sets up beads tracking.
-
-### 2. Start Claude Code and describe your idea
+### macOS (Intel)
 
 ```bash
-claude
-> /brain-dump
+curl -L https://github.com/YOUR_USERNAME/resonance/releases/latest/download/resonance-macos-x86_64 -o resonance
+xattr -d com.apple.quarantine resonance
+chmod +x resonance
+./resonance
 ```
 
-The `/brain-dump` command walks you through describing your project. Claude will populate `openspec/project.md`, create feature specs, fill out docs, and create beads issues for each piece of work.
-
-> Optional: if you prefer the native OpenSpec workflow, run `openspec update` and use `/opsx:propose` for spec-first change proposals.
-
-### 3. Start building
+### Linux (x86_64)
 
 ```bash
-> /start-bead
+curl -L https://github.com/YOUR_USERNAME/resonance/releases/latest/download/resonance-linux-x86_64 -o resonance
+chmod +x resonance
+./resonance
 ```
 
-Claude picks up an issue, marks it in-progress, and starts working. When you're done:
+> **Linux note:** requires a working audio device (ALSA/PulseAudio) and a display server (X11 or Wayland).
+
+---
+
+## Controls
+
+| Key / Action | Effect |
+|---|---|
+| **Space** | Spawn 20 particles at random positions |
+| **Left click** (empty space) | Place a gravity well |
+| **Left click + drag** (on well) | Move the gravity well |
+| **Right click** (on well) | Remove the gravity well |
+| **C** | Clear all particles |
+| **R** | Reset — clear particles and all wells |
+| **+** / **=** | Increase gravity well strength |
+| **-** | Decrease gravity well strength |
+
+---
+
+## How It Works
+
+- **Particles** spawn with random velocity vectors and a frequency from the A minor pentatonic scale (A, C, D, E, G across three octaves).
+- **Colour** maps to pitch — blue = low frequency, red = high frequency.
+- **Gravity wells** attract particles with Newtonian gravity (F = G·m/r²). Left-click anywhere to place one.
+- **Collisions** trigger a 150 ms sine tone. Collision speed sets the volume; both particle frequencies play for harmonic richness.
+- **Voice limiting** caps simultaneous tones at 16 to prevent audio overload.
+- **Motion trails** show each particle's recent path.
+
+---
+
+## Build from Source
+
+Requires Rust stable (1.70+).
 
 ```bash
-> /complete-bead
+git clone https://github.com/YOUR_USERNAME/resonance
+cd resonance
+
+# macOS / Linux with ALSA headers:
+cargo build --release
+
+# Linux without ALSA (silent mode — visual only):
+cargo build --release --no-default-features
+
+./target/release/resonance
 ```
 
-This runs tests, commits, closes the issue, and syncs.
-
-## Project Structure
-
-```
-CLAUDE.md               # Agent instructions (auto-loaded by Claude Code)
-GETTING-STARTED.md      # Detailed setup and workflow reference
-docs/
-  SPEC.md               # Project specification (fill in or use /brain-dump)
-  DECISIONS.md           # Architecture decision log
-openspec/
-  project.md            # Project context (identity, stack, constraints)
-  specs/                # Feature specifications
-  changes/              # Change proposals for existing features
-.claude/
-  commands/             # Slash commands (/start-bead, /tdd, etc.)
-  rules/                # Auto-loaded rules (behavior, style, security, testing)
-  hooks.json            # Automated hooks (beads enforcement, console.log warnings)
-src/                    # Source code
-tests/                  # Test files (mirrors src/ structure)
-infrastructure/         # Deployment configs
-.env.example            # Environment variable template
-```
-
-## Slash Commands
-
-| Command | What it does |
-|---------|-------------|
-| `/brain-dump` | Turn an unstructured idea into specs, docs, and issues |
-| `/start-bead` | Pick or create a beads issue and start work |
-| `/complete-bead` | Run tests, commit, close the issue, sync |
-| `/checkpoint` | Stage, commit, and sync current progress |
-| `/plan` | Design an approach and wait for your approval before coding |
-| `/tdd` | Test-driven development cycle (red/green/refactor) |
-| `/code-review` | Security and quality review of recent changes |
-| `/status` | Show issues, git state, and ready tasks |
-
-## Workflow
-
-The template enforces a simple loop:
-
-1. **Pick work** -- `bd ready` shows unblocked issues, or create one with `bd create`
-2. **Start** -- `bd update <id> --status in_progress`
-3. **Build** -- Write code with Claude. Commit frequently with `(bd-xxx)` in the message.
-4. **Finish** -- `bd close <id>`, run tests, `bd sync`, `git push`
-
-Hooks automatically warn you if you try to edit code or commit without an active issue.
-
-## Customising the Template
-
-After running `setup.sh`, make it yours:
-
-- **CLAUDE.md** -- Update the project overview, stack, and commands sections
-- **docs/SPEC.md** -- Fill in your project specification (or let `/brain-dump` do it)
-- **openspec/project.md** -- Set your project identity, tech stack, and constraints
-- **.claude/rules/** -- Adjust coding style, security, or testing rules to match your preferences
-- **.env.example** -- Add your project's environment variables
-
-## Manual Setup
-
-If you prefer not to use `setup.sh`:
+### Linux build dependencies
 
 ```bash
-cp -r project-template my-project
-cd my-project
-rm -rf .git .beads setup.sh
-git init
-bd init && bd hooks install
-cp .env.example .env
+sudo apt-get install -y pkg-config libasound2-dev libudev-dev libxkbcommon-dev
+```
+
+---
+
+## Architecture
+
+```
+src/
+  main.rs              — Bevy App setup
+  physics/
+    particles.rs       — Particle component, spawn, integration
+    gravity.rs         — Gravity well + force system
+    collision.rs       — Elastic collision detection & response
+  audio/
+    synth.rs           — Sine tone voice pool (background thread)
+    scale.rs           — A minor pentatonic frequency table
+  rendering/
+    particles.rs       — Sprite visuals + motion trails (gizmos)
+    wells.rs           — Pulsing gravity well rings (gizmos)
+    ui.rs              — HUD (particle count, controls hint)
+  input/
+    mod.rs             — Mouse + keyboard input
+```
+
+---
+
+## Releases
+
+GitHub Actions builds release binaries automatically on `v*` tag pushes:
+
+| Target | Binary |
+|---|---|
+| macOS Apple Silicon | `resonance-macos-arm64` |
+| macOS Intel | `resonance-macos-x86_64` |
+| Linux x86_64 | `resonance-linux-x86_64` |
+
+To cut a release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
 ```
