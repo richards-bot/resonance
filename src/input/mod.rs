@@ -113,10 +113,11 @@ fn mouse_input(
             }
         }
 
-        // Spawn a new well
+        // Spawn a new well — include GlobalTransform for Bevy's hierarchy contract
         commands.spawn((
             GravityWell { strength: 1.0 },
             Transform::from_xyz(world_pos.x, world_pos.y, 0.0),
+            GlobalTransform::default(),
             Visibility::Visible,
         ));
     }

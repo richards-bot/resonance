@@ -21,10 +21,8 @@ pub fn detect_collisions(
     mut query: Query<(Entity, &mut Particle, &mut Transform)>,
     mut events: EventWriter<CollisionEvent>,
 ) {
-    // Collect mutable references by gathering data first, then applying changes.
-    // Bevy doesn't allow two mutable borrows of the same query simultaneously,
-    // so we gather entity data, compute responses, then apply.
-    let mut particles: Vec<(Entity, Vec2, Vec2, f32, f32, f32)> = query
+    // Gather snapshot — Bevy prevents two simultaneous mutable query borrows.
+    let particles: Vec<(Entity, Vec2, Vec2, f32, f32, f32)> = query
         .iter()
         .map(|(e, p, t)| (e, t.translation.truncate(), p.velocity, p.radius, p.mass, p.frequency))
         .collect();
@@ -51,12 +49,12 @@ pub fn detect_collisions(
                 if speed_along_normal > 0.0 {
                     let impact_speed = speed_along_normal.abs();
 
-                    // Elastic collision impulse
-                    let impulse_scalar = 2.0 * speed_along_normal / (mass_a + mass_b);
-                    velocity_deltas[i] -= normal * impulse_scalar * mass_b;
-                    velocity_deltas[j] += normal * impulse_scalar * mass_a;
+                    // Elastic impulse magnitude: 2 * dot(rel_vel,n) * m_a*m_b / (m_a+m_b)
+                    // Δv_a = -impulse/m_a * n,  Δv_b = +impulse/m_b * n
+                    let impulse = 2.0 * speed_along_normal * mass_a * mass_b / (mass_a + mass_b);
+                    velocity_deltas[i] -= normal * impulse / mass_a;
+                    velocity_deltas[j] += normal * impulse / mass_b;
 
-                    // Fire collision event for audio
                     events.send(CollisionEvent {
                         freq_a,
                         freq_b,
@@ -64,16 +62,16 @@ pub fn detect_collisions(
                     });
                 }
 
-                // Positional correction to prevent sinking
+                // Positional correction — split overlap evenly, weighted by mass
                 let overlap = min_dist - dist;
-                let correction = normal * overlap * 0.5;
-                position_deltas[i] -= correction;
-                position_deltas[j] += correction;
+                let total_mass = mass_a + mass_b;
+                position_deltas[i] -= normal * overlap * (mass_b / total_mass);
+                position_deltas[j] += normal * overlap * (mass_a / total_mass);
             }
         }
     }
 
-    // Apply deltas
+    // Apply deltas back into the ECS
     for (i, (entity, _, _, _, _, _)) in particles.iter().enumerate() {
         if let Ok((_, mut particle, mut transform)) = query.get_mut(*entity) {
             particle.velocity += velocity_deltas[i];
@@ -81,10 +79,4 @@ pub fn detect_collisions(
             transform.translation.y += position_deltas[i].y;
         }
     }
-
-    // Update local velocity cache so subsequent pairs see fresh velocities
-    // (This is a simplified approach — good enough for <500 particles)
-    let _ = particles.iter_mut().zip(velocity_deltas.iter()).map(|(p, dv)| {
-        p.2 += *dv;
-    }).count();
 }

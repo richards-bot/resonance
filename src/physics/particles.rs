@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -16,8 +18,8 @@ pub struct Particle {
     pub mass: f32,
     /// Base frequency (Hz) assigned at spawn from pentatonic scale.
     pub frequency: f32,
-    /// Trail history for motion-trail rendering (world positions, newest last).
-    pub trail: Vec<Vec2>,
+    /// Trail history — ring buffer of recent world positions (oldest first).
+    pub trail: VecDeque<Vec2>,
 }
 
 /// Maximum number of trail positions retained per particle.
@@ -57,7 +59,7 @@ pub fn spawn_particles(
                 radius,
                 mass,
                 frequency,
-                trail: Vec::new(),
+                trail: VecDeque::with_capacity(TRAIL_LEN + 1),
             },
             Sprite {
                 color,
@@ -78,11 +80,11 @@ pub fn integrate_particles(
     const DRAG: f32 = 0.985;
 
     for (mut particle, mut transform) in &mut query {
-        // Record trail position before moving
+        // Record trail position before moving — O(1) push_back + pop_front
         let pos = transform.translation.truncate();
-        particle.trail.push(pos);
+        particle.trail.push_back(pos);
         if particle.trail.len() > TRAIL_LEN {
-            particle.trail.remove(0);
+            particle.trail.pop_front();
         }
 
         // Integrate position
