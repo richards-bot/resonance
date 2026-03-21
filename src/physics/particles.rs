@@ -51,22 +51,22 @@ pub fn spawn_particles(
         let freq_idx = rng.gen_range(0..frequencies.len());
         let frequency = frequencies[freq_idx];
 
-        // Pick one of 5 distinct colours at random
-        const PALETTE: [Color; 5] = [
-            Color::hsl(5.0, 0.85, 0.60),   // coral red
-            Color::hsl(38.0, 0.90, 0.58),  // amber
-            Color::hsl(175.0, 0.75, 0.52), // teal
-            Color::hsl(270.0, 0.70, 0.62), // violet
-            Color::hsl(100.0, 0.70, 0.52), // lime
+        // Pick one of 5 distinct colours at random (explicit sRGB to avoid HSL conversion issues)
+        let palette: [Color; 5] = [
+            Color::srgb(0.93, 0.36, 0.32), // coral red
+            Color::srgb(0.97, 0.64, 0.10), // amber
+            Color::srgb(0.16, 0.80, 0.73), // teal
+            Color::srgb(0.63, 0.34, 0.88), // violet
+            Color::srgb(0.46, 0.82, 0.17), // lime
         ];
-        let color = PALETTE[rng.gen_range(0..PALETTE.len())];
+        let color = palette[rng.gen_range(0..palette.len())];
 
         let mesh = meshes.add(Sphere::new(radius));
         let material = materials.add(StandardMaterial {
             base_color: color,
-            metallic: 0.1,
-            perceptual_roughness: 0.5,
-            emissive: color.to_linear() * 0.05,
+            metallic: 0.05,
+            perceptual_roughness: 0.55,
+            // No emissive — let directional lights do all the work for proper shading
             ..default()
         });
 

@@ -31,17 +31,23 @@ fn main() {
 
 /// Spawn ambient and directional lights for PBR rendering.
 fn setup_lighting(mut commands: Commands) {
+    // Low ambient so directional lights create visible shading on sphere surfaces
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 400.0,
+        brightness: 80.0,
     });
-    commands.spawn(DirectionalLight {
-        illuminance: 20_000.0,
-        shadows_enabled: false,
-        ..default()
-    });
+    // Key light — main shading source
     commands.spawn((
-        DirectionalLight { illuminance: 8_000.0, shadows_enabled: false, ..default() },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -2.0, 1.0, 0.0)),
+        DirectionalLight {
+            illuminance: 25_000.0,
+            shadows_enabled: false,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.8, 0.0)),
+    ));
+    // Fill light — softer, opposite side to prevent pure-black shadows
+    commands.spawn((
+        DirectionalLight { illuminance: 6_000.0, shadows_enabled: false, ..default() },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.5, -1.5, 0.0)),
     ));
 }
