@@ -5,7 +5,7 @@ use bevy::window::PrimaryWindow;
 use crate::audio::scale::PENTATONIC_FREQS;
 use crate::physics::bodies::{spawn_moon, spawn_planet, spawn_star, spawn_star_at, Moon, Planet, Star, Velocity};
 use crate::physics::particles::{spawn_particles, Particle};
-use crate::physics::SimulationMode;
+use crate::physics::{Paused, SimulationMode};
 
 /// Current placement mode — determines what a left click spawns.
 #[derive(Resource, Default, PartialEq, Debug, Clone, Copy)]
@@ -17,12 +17,22 @@ pub enum PlacementMode {
     Moon,
 }
 
+/// Tracks the planet entity selected as the target for the next moon placement.
+///
+/// Moon placement is a two-click flow: first click targets a planet, second click
+/// places the moon. Cleared on `Escape`, mode switch, or successful placement.
+#[derive(Resource, Default)]
+pub struct MoonTarget {
+    pub planet: Option<Entity>,
+}
+
 /// Bevy plugin for mouse and keyboard input.
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlacementMode>()
+            .init_resource::<MoonTarget>()
             .add_systems(Update, (keyboard_input, mouse_input, scroll_input));
     }
 }
@@ -48,7 +58,8 @@ fn ray_to_plane_z(
 /// - `1` → PlacementMode::Star
 /// - `2` → PlacementMode::Planet
 /// - `3` → PlacementMode::Moon
-/// - `Escape` → PlacementMode::None
+/// - `Escape` → PlacementMode::None (also clears MoonTarget)
+/// - `P` → toggle Paused
 /// - `Space` → spawn 20 debris particles
 /// - `C` → clear debris particles only
 /// - `R` → reset everything
@@ -59,6 +70,8 @@ fn keyboard_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<PlacementMode>,
     mut sim_mode: ResMut<SimulationMode>,
+    mut paused: ResMut<Paused>,
+    mut moon_target: ResMut<MoonTarget>,
     particles: Query<Entity, With<Particle>>,
     planets: Query<Entity, With<Planet>>,
     moons: Query<Entity, With<Moon>>,
@@ -67,15 +80,23 @@ fn keyboard_input(
 ) {
     if keys.just_pressed(KeyCode::Digit1) {
         *mode = PlacementMode::Star;
+        moon_target.planet = None;
     }
     if keys.just_pressed(KeyCode::Digit2) {
         *mode = PlacementMode::Planet;
+        moon_target.planet = None;
     }
     if keys.just_pressed(KeyCode::Digit3) {
         *mode = PlacementMode::Moon;
+        moon_target.planet = None;
     }
     if keys.just_pressed(KeyCode::Escape) {
         *mode = PlacementMode::None;
+        moon_target.planet = None;
+    }
+
+    if keys.just_pressed(KeyCode::KeyP) {
+        paused.0 = !paused.0;
     }
 
     if keys.just_pressed(KeyCode::Space) {
@@ -108,6 +129,7 @@ fn keyboard_input(
         }
         *mode = PlacementMode::None;
         *sim_mode = SimulationMode::Normal;
+        moon_target.planet = None;
     }
 
     // Chenciner-Montgomery figure-8 three-body solution
@@ -126,6 +148,7 @@ fn keyboard_input(
         }
         *mode = PlacementMode::None;
         *sim_mode = SimulationMode::ThreeBody;
+        moon_target.planet = None;
 
         // Calibrated initial conditions for G=500, mass=1_000_000.
         // v_scale = sqrt(G * mass / pos_scale) = sqrt(500 * 1_000_000 / 400) ≈ 1118
@@ -162,12 +185,17 @@ fn keyboard_input(
 }
 
 /// Handle left/right mouse clicks for body placement and removal.
+///
+/// Moon placement uses a two-click flow:
+/// - First click in Moon mode: targets the nearest planet within 120 units.
+/// - Second click in Moon mode: spawns the moon orbiting the targeted planet.
 fn mouse_input(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mouse: Res<ButtonInput<MouseButton>>,
     mode: Res<PlacementMode>,
+    mut moon_target: ResMut<MoonTarget>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     stars: Query<(Entity, &Transform, &Star)>,
@@ -219,29 +247,35 @@ fn mouse_input(
             spawn_planet(&mut commands, &mut meshes, &mut materials, world_pos, star_mass);
         }
         PlacementMode::Moon => {
-            // Find the nearest planet within 300 units
-            let mut nearest: Option<(Entity, Vec3, f32, Vec3)> = None;
-            let mut min_dist = 300.0_f32;
-            for (entity, transform, planet, vel) in &planets {
-                let dist = transform.translation.distance(world_pos);
-                if dist < min_dist {
-                    min_dist = dist;
-                    nearest = Some((entity, transform.translation, planet.mass, vel.0));
+            if moon_target.planet.is_none() {
+                // First click: find the nearest planet within 120 units and target it
+                let mut nearest: Option<Entity> = None;
+                let mut min_dist = 120.0_f32;
+                for (entity, transform, _, _) in &planets {
+                    let dist = transform.translation.distance(world_pos);
+                    if dist < min_dist {
+                        min_dist = dist;
+                        nearest = Some(entity);
+                    }
                 }
+                moon_target.planet = nearest;
+            } else {
+                // Second click: spawn moon orbiting the targeted planet
+                let target_entity = moon_target.planet.unwrap();
+                if let Ok((_, p_transform, p_planet, p_vel)) = planets.get(target_entity) {
+                    spawn_moon(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        world_pos,
+                        target_entity,
+                        p_transform.translation,
+                        p_planet.mass,
+                        p_vel.0,
+                    );
+                }
+                moon_target.planet = None;
             }
-            if let Some((p_entity, p_pos, p_mass, p_vel)) = nearest {
-                spawn_moon(
-                    &mut commands,
-                    &mut meshes,
-                    &mut materials,
-                    world_pos,
-                    p_entity,
-                    p_pos,
-                    p_mass,
-                    p_vel,
-                );
-            }
-            // If no planet within 300 units, silently do nothing
         }
         PlacementMode::None => {}
     }

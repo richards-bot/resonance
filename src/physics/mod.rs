@@ -15,12 +15,24 @@ pub enum SimulationMode {
     ThreeBody,
 }
 
+/// Pause state — when `true`, all physics systems stop updating.
+///
+/// Body placement and camera controls remain active while paused.
+#[derive(Resource, Default, PartialEq)]
+pub struct Paused(pub bool);
+
+/// Run condition: returns `true` when the simulation is not paused.
+fn not_paused(paused: Res<Paused>) -> bool {
+    !paused.0
+}
+
 /// Bevy plugin that wires up all physics systems.
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SimulationMode>()
+            .init_resource::<Paused>()
             .add_event::<collision::CollisionEvent>()
             .add_systems(Startup, particles::setup_camera)
             .add_systems(
@@ -33,7 +45,8 @@ impl Plugin for PhysicsPlugin {
                     particles::integrate_particles,
                     particles::despawn_escaped_particles,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(not_paused),
             );
     }
 }
