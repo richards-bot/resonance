@@ -125,3 +125,63 @@ src/
 - [ ] GitHub Actions builds and uploads Mac arm64 + x86_64 binaries on tag push
 - [ ] README has download instructions
 - [ ] App runs on macOS without any additional dependencies (self-contained binary)
+
+---
+
+## Phase 2 — Full 3D (in progress)
+
+Convert the simulation to a true 3D experience.
+
+### Goals
+- Particles are PBR spheres in a 3D volume (metallic, emissive glow)
+- Orbit camera — left-drag to orbit, right-drag to pan, scroll to zoom (`bevy_panorbit_camera`)
+- Gravity wells exist in 3D space — click to place at current depth, scroll (away from wells) to push placement depth deeper/shallower
+- Collisions and gravity physics identical — just Vec2 → Vec3
+- Audio unchanged
+
+### Definition of Done (Phase 2)
+- [ ] All physics in 3D (Vec3)
+- [ ] PBR sphere rendering with emissive glow
+- [ ] Orbit camera working
+- [ ] Well placement with depth control
+- [ ] Trails render in 3D
+- [ ] GitHub Actions builds Mac arm64 + x86_64 + Linux binaries on tag push
+
+---
+
+## Phase 3 — Web / WASM Build
+
+Deploy Resonance as a shareable browser experience. No install, no quarantine warnings — just a URL.
+
+### Goals
+- Same codebase, WASM build target (`wasm32-unknown-unknown`)
+- Hosted on **GitHub Pages** — auto-deploys on every `v*` tag
+- Audio: feature-flagged — native uses `rodio`, web uses `bevy_audio` with Web Audio API backend
+- WebGL2 target for broad browser support (Chrome, Firefox, Safari, Edge)
+- WebGPU target as opt-in for full PBR quality on Chrome/Edge
+- Bundle size target: < 25MB gzipped
+
+### Build flags
+```toml
+[features]
+default = ["native-audio"]
+native-audio = ["dep:rodio"]
+web = ["bevy/webgl2"]         # or "bevy/webgpu" for cutting edge
+```
+
+### GitHub Actions
+- Add a `pages.yml` workflow triggered on `v*` tags
+- Builds with `wasm-pack` or `wasm-bindgen` + `trunk`
+- Deploys to `gh-pages` branch → GitHub Pages URL
+- Native binary release workflow unchanged
+
+### Controls (web)
+- Identical to desktop — mouse + keyboard, no mobile required (Phase 3 is desktop browser first)
+
+### Definition of Done (Phase 3)
+- [ ] `cargo build --target wasm32-unknown-unknown --features web` succeeds
+- [ ] App runs in Chrome and Firefox without errors
+- [ ] Audio works in browser (Web Audio API)
+- [ ] GitHub Pages URL live and accessible
+- [ ] README updated with "Play in browser" link at the top
+- [ ] Native desktop builds unaffected
