@@ -1,60 +1,89 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy_panorbit_camera::PanOrbitCamera;
 
 use crate::audio::scale::PENTATONIC_FREQS;
-use crate::physics::gravity::GravityWell;
+use crate::physics::bodies::{spawn_moon, spawn_planet, spawn_star, Moon, Planet, Star, Velocity};
 use crate::physics::particles::{spawn_particles, Particle};
 
-/// Tag for a gravity well currently being dragged by the mouse.
-#[derive(Component)]
-struct Dragging;
-
-/// Z depth at which new gravity wells are placed when left-clicking.
-///
-/// Adjusted by scrolling away from existing wells.
-#[derive(Resource)]
-struct PlacementDepth(f32);
+/// Current placement mode — determines what a left click spawns.
+#[derive(Resource, Default, PartialEq, Debug, Clone, Copy)]
+pub enum PlacementMode {
+    #[default]
+    None,
+    Star,
+    Planet,
+    Moon,
+}
 
 /// Bevy plugin for mouse and keyboard input.
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(PlacementDepth(0.0))
-            .add_systems(
-                Update,
-                (
-                    keyboard_input,
-                    mouse_input,
-                    drag_wells,
-                    scroll_well_gravity,
-                ),
-            );
+        app.init_resource::<PlacementMode>().add_systems(
+            Update,
+            (keyboard_input, mouse_input, scroll_input),
+        );
     }
 }
 
+/// Cast a ray from the camera through the cursor and intersect with the plane z = depth.
+///
+/// Returns `None` if the ray is parallel to the plane.
+fn ray_to_plane_z(
+    camera: &Camera,
+    cam_transform: &GlobalTransform,
+    cursor: Vec2,
+    depth: f32,
+) -> Option<Vec3> {
+    let ray = camera.viewport_to_world(cam_transform, cursor).ok()?;
+    if ray.direction.z.abs() < f32::EPSILON {
+        return None;
+    }
+    let t = (depth - ray.origin.z) / ray.direction.z;
+    Some(ray.origin + *ray.direction * t)
+}
+
 /// Handle keyboard controls:
-/// - Space: spawn 20 particles
-/// - C: clear particles
-/// - R: reset everything
+/// - `1` → PlacementMode::Star
+/// - `2` → PlacementMode::Planet
+/// - `3` → PlacementMode::Moon
+/// - `Escape` → PlacementMode::None
+/// - `Space` → spawn 20 debris particles
+/// - `C` → clear debris particles only
+/// - `R` → reset everything
 fn keyboard_input(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     keys: Res<ButtonInput<KeyCode>>,
+    mut mode: ResMut<PlacementMode>,
     particles: Query<Entity, With<Particle>>,
-    wells: Query<Entity, With<GravityWell>>,
+    planets: Query<Entity, With<Planet>>,
+    moons: Query<Entity, With<Moon>>,
+    stars: Query<Entity, With<Star>>,
     window: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let half = if let Ok(win) = window.get_single() {
-        Vec2::new(win.width() * 0.5, win.height() * 0.5)
-    } else {
-        Vec2::new(640.0, 360.0)
-    };
+    if keys.just_pressed(KeyCode::Digit1) {
+        *mode = PlacementMode::Star;
+    }
+    if keys.just_pressed(KeyCode::Digit2) {
+        *mode = PlacementMode::Planet;
+    }
+    if keys.just_pressed(KeyCode::Digit3) {
+        *mode = PlacementMode::Moon;
+    }
+    if keys.just_pressed(KeyCode::Escape) {
+        *mode = PlacementMode::None;
+    }
 
     if keys.just_pressed(KeyCode::Space) {
+        let half = if let Ok(win) = window.get_single() {
+            Vec2::new(win.width() * 0.5, win.height() * 0.5)
+        } else {
+            Vec2::new(640.0, 360.0)
+        };
         spawn_particles(&mut commands, &mut meshes, &mut materials, 20, half, PENTATONIC_FREQS);
     }
 
@@ -68,127 +97,119 @@ fn keyboard_input(
         for entity in &particles {
             commands.entity(entity).despawn();
         }
-        for entity in &wells {
+        for entity in &planets {
             commands.entity(entity).despawn();
         }
+        for entity in &moons {
+            commands.entity(entity).despawn();
+        }
+        for entity in &stars {
+            commands.entity(entity).despawn();
+        }
+        *mode = PlacementMode::None;
     }
 }
 
-/// Cast a ray from the camera through the cursor and intersect with the plane z = depth.
-///
-/// Returns `None` if the ray is parallel to the plane.
-fn ray_to_plane_z(camera: &Camera, cam_transform: &GlobalTransform, cursor: Vec2, depth: f32) -> Option<Vec3> {
-    let ray = camera.viewport_to_world(cam_transform, cursor).ok()?;
-    if ray.direction.z.abs() < f32::EPSILON {
-        return None;
-    }
-    let t = (depth - ray.origin.z) / ray.direction.z;
-    Some(ray.origin + *ray.direction * t)
-}
-
-/// Handle left/right mouse clicks for well creation and removal.
+/// Handle left/right mouse clicks for body placement and removal.
 fn mouse_input(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mouse: Res<ButtonInput<MouseButton>>,
+    mode: Res<PlacementMode>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    wells: Query<(Entity, &Transform), With<GravityWell>>,
-    placement_depth: Res<PlacementDepth>,
-    mut camera_pan_orbit: Query<&mut PanOrbitCamera>,
+    stars: Query<(Entity, &Transform, &Star)>,
+    planets: Query<(Entity, &Transform, &Planet, &Velocity)>,
+    moons: Query<(Entity, &Transform), With<Moon>>,
 ) {
     let Ok(win) = window.get_single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
     let Ok((camera, cam_transform)) = camera_q.get_single() else { return };
+    let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, 0.0) else { return };
 
-    let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, placement_depth.0) else {
-        return;
-    };
-
-    // Right click: remove well near cursor position (at placement depth)
+    // Right click: despawn any body within 50 units of click
     if mouse.just_pressed(MouseButton::Right) {
-        for (entity, transform) in &wells {
+        for (entity, transform, _) in &stars {
             if transform.translation.distance(world_pos) < 50.0 {
                 commands.entity(entity).despawn();
                 return;
             }
         }
-    }
-
-    // Left click: start drag on existing well, or spawn new well
-    if mouse.just_pressed(MouseButton::Left) {
-        for (entity, transform) in &wells {
+        for (entity, transform, _, _) in &planets {
             if transform.translation.distance(world_pos) < 50.0 {
-                commands.entity(entity).insert(Dragging);
-                if let Ok(mut pan_orbit) = camera_pan_orbit.get_single_mut() {
-                    pan_orbit.enabled = false;
-                }
+                commands.entity(entity).despawn();
                 return;
             }
         }
-
-        // Spawn a new well at the current placement depth
-        commands.spawn((
-            GravityWell { strength: 3000.0, influence_radius: 0.0 },
-            Transform::from_xyz(world_pos.x, world_pos.y, placement_depth.0),
-            GlobalTransform::default(),
-            Visibility::Visible,
-        ));
+        for (entity, transform) in &moons {
+            if transform.translation.distance(world_pos) < 50.0 {
+                commands.entity(entity).despawn();
+                return;
+            }
+        }
+        return;
     }
 
-    // Release drag
-    if mouse.just_released(MouseButton::Left) {
-        for (entity, _) in &wells {
-            commands.entity(entity).remove::<Dragging>();
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    match *mode {
+        PlacementMode::Star => {
+            // Despawn existing star, then place new one at origin
+            for (entity, _, _) in &stars {
+                commands.entity(entity).despawn();
+            }
+            spawn_star(&mut commands, &mut meshes, &mut materials);
         }
-        if let Ok(mut pan_orbit) = camera_pan_orbit.get_single_mut() {
-            pan_orbit.enabled = true;
+        PlacementMode::Planet => {
+            let star_mass =
+                stars.iter().next().map(|(_, _, s)| s.mass).unwrap_or(1_000_000.0);
+            spawn_planet(&mut commands, &mut meshes, &mut materials, world_pos, star_mass);
         }
+        PlacementMode::Moon => {
+            // Find the nearest planet within 300 units
+            let mut nearest: Option<(Entity, Vec3, f32, Vec3)> = None;
+            let mut min_dist = 300.0_f32;
+            for (entity, transform, planet, vel) in &planets {
+                let dist = transform.translation.distance(world_pos);
+                if dist < min_dist {
+                    min_dist = dist;
+                    nearest = Some((entity, transform.translation, planet.mass, vel.0));
+                }
+            }
+            if let Some((p_entity, p_pos, p_mass, p_vel)) = nearest {
+                spawn_moon(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    world_pos,
+                    p_entity,
+                    p_pos,
+                    p_mass,
+                    p_vel,
+                );
+            }
+            // If no planet within 300 units, silently do nothing
+        }
+        PlacementMode::None => {}
     }
 }
 
-/// Move dragged gravity wells to follow the cursor, keeping their current z depth.
-fn drag_wells(
-    mut wells: Query<&mut Transform, (With<GravityWell>, With<Dragging>)>,
-    window: Query<&Window, With<PrimaryWindow>>,
-    camera_q: Query<(&Camera, &GlobalTransform)>,
-) {
-    let Ok(win) = window.get_single() else { return };
-    let Some(cursor) = win.cursor_position() else { return };
-    let Ok((camera, cam_transform)) = camera_q.get_single() else { return };
-
-    for mut transform in &mut wells {
-        let well_z = transform.translation.z;
-        let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, well_z) else {
-            continue;
-        };
-        transform.translation.x = world_pos.x;
-        transform.translation.y = world_pos.y;
-    }
-}
-
-/// Scroll near a well to adjust its gravity strength (or Shift+scroll to resize influence radius).
-/// Scroll away from all wells to adjust the placement depth for the next well.
+/// Scroll near the star (within 80 units) to adjust its mass.
 ///
-/// Strength is clamped to `[0.0, 200_000.0]`, step = scroll_y × 2000.
-/// Influence radius is clamped to `[0.0, 1500.0]`, step = scroll_y × 30.
-/// Placement depth is clamped to `[-800.0, 800.0]`, step = scroll_y × 20.
-fn scroll_well_gravity(
+/// Step = `star.mass × 0.1` per scroll line. Clamped to `[100_000, 10_000_000]`.
+fn scroll_input(
     mut scroll_events: EventReader<MouseWheel>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut wells: Query<(&Transform, &mut GravityWell)>,
-    mut placement_depth: ResMut<PlacementDepth>,
-    keys: Res<ButtonInput<KeyCode>>,
+    mut stars: Query<(&Transform, &mut Star)>,
 ) {
     let Ok(win) = window.get_single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
     let Ok((camera, cam_transform)) = camera_q.get_single() else { return };
-
-    let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, placement_depth.0) else {
-        return;
-    };
-
-    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, 0.0) else { return };
 
     for event in scroll_events.read() {
         let delta_y = match event.unit {
@@ -196,20 +217,11 @@ fn scroll_well_gravity(
             MouseScrollUnit::Pixel => event.y / 16.0,
         };
 
-        let mut near_well = false;
-        for (transform, mut well) in &mut wells {
-            if transform.translation.distance(world_pos) < 60.0 {
-                if shift {
-                    well.influence_radius = (well.influence_radius + delta_y * 30.0).clamp(0.0, 1500.0);
-                } else {
-                    well.strength = (well.strength + delta_y * 5000.0).clamp(0.0, 200_000.0);
-                }
-                near_well = true;
+        for (transform, mut star) in &mut stars {
+            if transform.translation.distance(world_pos) < 80.0 {
+                let step = star.mass * 0.1 * delta_y;
+                star.mass = (star.mass + step).clamp(100_000.0, 10_000_000.0);
             }
-        }
-
-        if !near_well {
-            placement_depth.0 = (placement_depth.0 + delta_y * 20.0).clamp(-800.0, 800.0);
         }
     }
 }

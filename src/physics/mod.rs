@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+pub mod bodies;
 pub mod collision;
 pub mod gravity;
 pub mod particles;
@@ -14,10 +15,10 @@ impl Plugin for PhysicsPlugin {
             .add_systems(
                 Update,
                 (
-                    gravity::apply_gravity,
-                    gravity::apply_particle_gravity,
+                    gravity::apply_n_body_gravity,
                     collision::detect_collisions,
                     particles::integrate_particles,
+                    gravity::integrate_bodies,
                     particles::despawn_escaped_particles,
                 )
                     .chain(),

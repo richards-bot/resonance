@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 pub mod particles;
+pub mod star;
 pub mod ui;
-pub mod wells;
 
 /// Bevy plugin that sets up all rendering systems.
 pub struct RenderingPlugin;
@@ -15,7 +15,8 @@ impl Plugin for RenderingPlugin {
                 Update,
                 (
                     particles::draw_trails,
-                    wells::animate_wells,
+                    particles::draw_body_trails,
+                    star::animate_star,
                     ui::update_hud,
                 ),
             );

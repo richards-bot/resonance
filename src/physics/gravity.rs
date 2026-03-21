@@ -1,91 +1,142 @@
 use bevy::prelude::*;
 
+use super::bodies::{Moon, Planet, Star, Trail, Velocity, G};
 use super::particles::Particle;
 
-/// Radius threshold above which a particle acts as a mini gravity well.
-const LARGE_RADIUS: f32 = 45.0;
-
-/// A gravity well that attracts nearby particles.
-#[derive(Component)]
-pub struct GravityWell {
-    /// Absolute gravity strength in world units per second² at unit distance.
-    pub strength: f32,
-    /// Maximum influence radius in world units. `0.0` means infinite influence.
-    pub influence_radius: f32,
-}
-
-/// Global gravitational constant — scales all wells up to pixel-friendly magnitudes.
-const G: f32 = 80_000.0;
-
 /// Minimum distance clamp to prevent singularity blow-up on close approach.
-const MIN_DIST: f32 = 50.0;
+const MIN_DIST: f32 = 40.0;
 
-/// Apply gravitational attraction from large particles (radius > 45) to all other particles.
+/// Apply Newtonian n-body gravity between all bodies.
 ///
-/// Large particles act as mini gravity wells with `effective_strength = mass × 0.15`.
-/// Uses a single mutable query: collect source data first (immutable pass), then apply forces
-/// (mutable pass) — avoids the Bevy B0001 conflicting-query panic.
-pub fn apply_particle_gravity(
-    mut particles: Query<(Entity, &mut Particle, &Transform)>,
+/// Every body (Star, Planet, Moon, Particle) pulls every other body.
+/// The Star has no `Velocity` component — its position is fixed at the origin.
+/// Uses a snapshot-then-update approach to avoid Bevy B0001 query conflicts.
+pub fn apply_n_body_gravity(
+    star_q: Query<(&Transform, &Star)>,
+    planet_q: Query<(Entity, &Transform, &Planet)>,
+    moon_q: Query<(Entity, &Transform, &Moon)>,
+    mut vel_q: Query<&mut Velocity>,
+    mut particle_q: Query<(&mut Particle, &Transform)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
 
-    // Immutable pass: snapshot large-particle positions and strengths
-    let sources: Vec<(Entity, Vec3, f32)> = particles
-        .iter()
-        .filter(|(_, p, _)| p.radius > LARGE_RADIUS)
-        .map(|(e, p, t)| (e, t.translation, p.mass * 0.15))
-        .collect();
+    // Immutable snapshot of all body positions and masses
+    let stars: Vec<(Vec3, f32)> =
+        star_q.iter().map(|(t, s)| (t.translation, s.mass)).collect();
+    let planets: Vec<(Entity, Vec3, f32)> =
+        planet_q.iter().map(|(e, t, p)| (e, t.translation, p.mass)).collect();
+    let moons: Vec<(Entity, Vec3, f32)> =
+        moon_q.iter().map(|(e, t, m)| (e, t.translation, m.mass)).collect();
 
-    if sources.is_empty() {
-        return;
-    }
-
-    // Mutable pass: apply forces to all particles (skip self)
-    for (target_entity, mut particle, p_transform) in &mut particles {
-        let p_pos = p_transform.translation;
-        let effective_mass = particle.mass.min(200.0);
-
-        for (src_entity, src_pos, strength) in &sources {
-            if *src_entity == target_entity {
+    // Update planet velocities
+    for (entity, pos, _) in &planets {
+        let mut accel = Vec3::ZERO;
+        for (s_pos, s_mass) in &stars {
+            let delta = *s_pos - *pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * s_mass / (dist * dist);
+        }
+        for (other_e, other_pos, other_mass) in &planets {
+            if other_e == entity {
                 continue;
             }
-            let delta = src_pos - p_pos;
+            let delta = *other_pos - *pos;
             let dist = delta.length().max(MIN_DIST);
-            let accel = delta.normalize() * G * strength / (dist * dist * effective_mass);
-            particle.velocity += accel * dt;
+            accel += delta.normalize() * G * other_mass / (dist * dist);
         }
+        for (_, m_pos, m_mass) in &moons {
+            let delta = *m_pos - *pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * m_mass / (dist * dist);
+        }
+        if let Ok(mut vel) = vel_q.get_mut(*entity) {
+            vel.0 += accel * dt;
+        }
+    }
+
+    // Update moon velocities
+    for (entity, pos, _) in &moons {
+        let mut accel = Vec3::ZERO;
+        for (s_pos, s_mass) in &stars {
+            let delta = *s_pos - *pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * s_mass / (dist * dist);
+        }
+        for (_, p_pos, p_mass) in &planets {
+            let delta = *p_pos - *pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * p_mass / (dist * dist);
+        }
+        for (other_e, other_pos, other_mass) in &moons {
+            if other_e == entity {
+                continue;
+            }
+            let delta = *other_pos - *pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * other_mass / (dist * dist);
+        }
+        if let Ok(mut vel) = vel_q.get_mut(*entity) {
+            vel.0 += accel * dt;
+        }
+    }
+
+    // Update particle velocities (attracted by star, planets, and moons)
+    for (mut particle, transform) in &mut particle_q {
+        let pos = transform.translation;
+        let mut accel = Vec3::ZERO;
+        for (s_pos, s_mass) in &stars {
+            let delta = *s_pos - pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * s_mass / (dist * dist);
+        }
+        for (_, p_pos, p_mass) in &planets {
+            let delta = *p_pos - pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * p_mass / (dist * dist);
+        }
+        for (_, m_pos, m_mass) in &moons {
+            let delta = *m_pos - pos;
+            let dist = delta.length().max(MIN_DIST);
+            accel += delta.normalize() * G * m_mass / (dist * dist);
+        }
+        particle.velocity += accel * dt;
     }
 }
 
-/// Apply gravitational attraction from every well to every particle.
+/// Integrate `Velocity` into `Transform` for Planet and Moon entities.
 ///
-/// Smaller (less massive) particles accelerate faster — acceleration is
-/// inversely proportional to mass: `accel = G × well.strength / (dist² × mass)`.
-/// Since mass ∝ radius², a particle half the radius accelerates 4× faster.
-pub fn apply_gravity(
-    wells: Query<(&Transform, &GravityWell)>,
-    mut particles: Query<(&mut Particle, &Transform)>,
+/// Also pushes the pre-move position into the body's `Trail` ring buffer.
+pub fn integrate_bodies(
+    mut planet_q: Query<
+        (&mut Transform, &Velocity, Option<&mut Trail>),
+        (With<Planet>, Without<Moon>),
+    >,
+    mut moon_q: Query<
+        (&mut Transform, &Velocity, Option<&mut Trail>),
+        (With<Moon>, Without<Planet>),
+    >,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
 
-    for (mut particle, p_transform) in &mut particles {
-        let p_pos = p_transform.translation;
-
-        for (w_transform, well) in &wells {
-            let w_pos = w_transform.translation;
-            let delta = w_pos - p_pos;
-            let dist = delta.length().max(MIN_DIST);
-            if well.influence_radius > 0.0 && dist > well.influence_radius {
-                continue;
+    for (mut transform, vel, trail_opt) in &mut planet_q {
+        if let Some(mut trail) = trail_opt {
+            trail.positions.push_back(transform.translation);
+            if trail.positions.len() > trail.max_len {
+                trail.positions.pop_front();
             }
-            // G scales up the force to compensate for pixel-scale distances
-            // Cap effective mass so large particles aren't over-dampened
-            let effective_mass = particle.mass.min(200.0);
-            let accel = delta.normalize() * G * well.strength / (dist * dist * effective_mass);
-            particle.velocity += accel * dt;
         }
+        transform.translation += vel.0 * dt;
+    }
+
+    for (mut transform, vel, trail_opt) in &mut moon_q {
+        if let Some(mut trail) = trail_opt {
+            trail.positions.push_back(transform.translation);
+            if trail.positions.len() > trail.max_len {
+                trail.positions.pop_front();
+            }
+        }
+        transform.translation += vel.0 * dt;
     }
 }
