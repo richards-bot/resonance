@@ -14,7 +14,9 @@ const MIN_DIST: f32 = 20.0;
 
 /// Apply gravitational attraction from every well to every particle.
 ///
-/// Uses `accel = (delta.normalize() * well.strength) / dist²`, clamped at MIN_DIST.
+/// Smaller (less massive) particles accelerate faster — acceleration is
+/// inversely proportional to mass: `accel = well.strength / (dist² × mass)`.
+/// Since mass ∝ radius², a particle half the radius accelerates 4× faster.
 pub fn apply_gravity(
     wells: Query<(&Transform, &GravityWell)>,
     mut particles: Query<(&mut Particle, &Transform)>,
@@ -29,7 +31,8 @@ pub fn apply_gravity(
             let w_pos = w_transform.translation.truncate();
             let delta = w_pos - p_pos;
             let dist = delta.length().max(MIN_DIST);
-            let accel = delta.normalize() * well.strength / (dist * dist);
+            // Divide by mass so lighter (smaller) particles pull in faster
+            let accel = delta.normalize() * well.strength / (dist * dist * particle.mass);
             particle.velocity += accel * dt;
         }
     }
