@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_panorbit_camera::PanOrbitCameraPlugin;
 
 mod audio;
 mod input;
@@ -17,12 +18,26 @@ fn main() {
                         ..default()
                     }),
                     ..default()
-                })
-                .set(ImagePlugin::default_nearest()),
+                }),
         )
+        .add_plugins(PanOrbitCameraPlugin)
         .add_plugins(physics::PhysicsPlugin)
         .add_plugins(audio::AudioPlugin)
         .add_plugins(rendering::RenderingPlugin)
         .add_plugins(input::InputPlugin)
+        .add_systems(Startup, setup_lighting)
         .run();
+}
+
+/// Spawn ambient and directional lights for PBR rendering.
+fn setup_lighting(mut commands: Commands) {
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 80.0,
+    });
+    commands.spawn(DirectionalLight {
+        illuminance: 8000.0,
+        shadows_enabled: false,
+        ..default()
+    });
 }

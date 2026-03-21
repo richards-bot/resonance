@@ -28,10 +28,10 @@ pub fn apply_gravity(
     let dt = time.delta_secs();
 
     for (mut particle, p_transform) in &mut particles {
-        let p_pos = p_transform.translation.truncate();
+        let p_pos = p_transform.translation;
 
         for (w_transform, well) in &wells {
-            let w_pos = w_transform.translation.truncate();
+            let w_pos = w_transform.translation;
             let delta = w_pos - p_pos;
             let dist = delta.length().max(MIN_DIST);
             // G scales up the force to compensate for pixel-scale distances

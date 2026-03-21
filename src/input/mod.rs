@@ -10,20 +10,27 @@ use crate::physics::particles::{spawn_particles, Particle};
 #[derive(Component)]
 struct Dragging;
 
+/// Z depth at which new gravity wells are placed when left-clicking.
+///
+/// Adjusted by scrolling away from existing wells.
+#[derive(Resource)]
+struct PlacementDepth(f32);
+
 /// Bevy plugin for mouse and keyboard input.
 pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                keyboard_input,
-                mouse_input,
-                drag_wells,
-                scroll_well_gravity,
-            ),
-        );
+        app.insert_resource(PlacementDepth(0.0))
+            .add_systems(
+                Update,
+                (
+                    keyboard_input,
+                    mouse_input,
+                    drag_wells,
+                    scroll_well_gravity,
+                ),
+            );
     }
 }
 
@@ -34,7 +41,7 @@ impl Plugin for InputPlugin {
 fn keyboard_input(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     keys: Res<ButtonInput<KeyCode>>,
     particles: Query<Entity, With<Particle>>,
     wells: Query<Entity, With<GravityWell>>,
@@ -66,6 +73,18 @@ fn keyboard_input(
     }
 }
 
+/// Cast a ray from the camera through the cursor and intersect with the plane z = depth.
+///
+/// Returns `None` if the ray is parallel to the plane.
+fn ray_to_plane_z(camera: &Camera, cam_transform: &GlobalTransform, cursor: Vec2, depth: f32) -> Option<Vec3> {
+    let ray = camera.viewport_to_world(cam_transform, cursor).ok()?;
+    if ray.direction.z.abs() < f32::EPSILON {
+        return None;
+    }
+    let t = (depth - ray.origin.z) / ray.direction.z;
+    Some(ray.origin + *ray.direction * t)
+}
+
 /// Handle left/right mouse clicks for well creation and removal.
 fn mouse_input(
     mut commands: Commands,
@@ -73,22 +92,20 @@ fn mouse_input(
     window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     wells: Query<(Entity, &Transform), With<GravityWell>>,
+    placement_depth: Res<PlacementDepth>,
 ) {
     let Ok(win) = window.get_single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
     let Ok((camera, cam_transform)) = camera_q.get_single() else { return };
 
-    // Convert cursor from viewport space to world space
-    let world_pos = match camera.viewport_to_world_2d(cam_transform, cursor) {
-        Ok(pos) => pos,
-        Err(_) => return,
+    let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, placement_depth.0) else {
+        return;
     };
 
-    // Right click: remove well under cursor
+    // Right click: remove well near cursor position (at placement depth)
     if mouse.just_pressed(MouseButton::Right) {
         for (entity, transform) in &wells {
-            let pos = transform.translation.truncate();
-            if pos.distance(world_pos) < 30.0 {
+            if transform.translation.distance(world_pos) < 50.0 {
                 commands.entity(entity).despawn();
                 return;
             }
@@ -97,19 +114,17 @@ fn mouse_input(
 
     // Left click: start drag on existing well, or spawn new well
     if mouse.just_pressed(MouseButton::Left) {
-        // Check if clicking near an existing well
         for (entity, transform) in &wells {
-            let pos = transform.translation.truncate();
-            if pos.distance(world_pos) < 30.0 {
+            if transform.translation.distance(world_pos) < 50.0 {
                 commands.entity(entity).insert(Dragging);
                 return;
             }
         }
 
-        // Spawn a new well with default absolute gravity strength
+        // Spawn a new well at the current placement depth
         commands.spawn((
             GravityWell { strength: 3000.0 },
-            Transform::from_xyz(world_pos.x, world_pos.y, 0.0),
+            Transform::from_xyz(world_pos.x, world_pos.y, placement_depth.0),
             GlobalTransform::default(),
             Visibility::Visible,
         ));
@@ -123,7 +138,7 @@ fn mouse_input(
     }
 }
 
-/// Move dragged gravity wells to follow the cursor.
+/// Move dragged gravity wells to follow the cursor, keeping their current z depth.
 fn drag_wells(
     mut wells: Query<&mut Transform, (With<GravityWell>, With<Dragging>)>,
     window: Query<&Window, With<PrimaryWindow>>,
@@ -133,33 +148,34 @@ fn drag_wells(
     let Some(cursor) = win.cursor_position() else { return };
     let Ok((camera, cam_transform)) = camera_q.get_single() else { return };
 
-    let world_pos = match camera.viewport_to_world_2d(cam_transform, cursor) {
-        Ok(pos) => pos,
-        Err(_) => return,
-    };
-
     for mut transform in &mut wells {
+        let well_z = transform.translation.z;
+        let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, well_z) else {
+            continue;
+        };
         transform.translation.x = world_pos.x;
         transform.translation.y = world_pos.y;
     }
 }
 
-/// Adjust gravity strength of a well when the cursor is within 60px and the user scrolls.
+/// Scroll near a well to adjust its gravity strength.
+/// Scroll away from all wells to adjust the placement depth for the next well.
 ///
 /// Strength is clamped to `[0.0, 200_000.0]`, step = scroll_y × 2000.
+/// Placement depth is clamped to `[-800.0, 800.0]`, step = scroll_y × 20.
 fn scroll_well_gravity(
     mut scroll_events: EventReader<MouseWheel>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut wells: Query<(&Transform, &mut GravityWell)>,
+    mut placement_depth: ResMut<PlacementDepth>,
 ) {
     let Ok(win) = window.get_single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
     let Ok((camera, cam_transform)) = camera_q.get_single() else { return };
 
-    let world_pos = match camera.viewport_to_world_2d(cam_transform, cursor) {
-        Ok(pos) => pos,
-        Err(_) => return,
+    let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, placement_depth.0) else {
+        return;
     };
 
     for event in scroll_events.read() {
@@ -168,11 +184,16 @@ fn scroll_well_gravity(
             MouseScrollUnit::Pixel => event.y / 16.0,
         };
 
+        let mut near_well = false;
         for (transform, mut well) in &mut wells {
-            let pos = transform.translation.truncate();
-            if pos.distance(world_pos) < 60.0 {
+            if transform.translation.distance(world_pos) < 60.0 {
                 well.strength = (well.strength + delta_y * 2000.0).clamp(0.0, 200_000.0);
+                near_well = true;
             }
+        }
+
+        if !near_well {
+            placement_depth.0 = (placement_depth.0 + delta_y * 20.0).clamp(-800.0, 800.0);
         }
     }
 }

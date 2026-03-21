@@ -1,8 +1,8 @@
 [package]
 name = "resonance"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "A 2D particle physics sonification engine"
+description = "A 3D particle physics sonification engine"
 license = "MIT"
 
 [features]
@@ -16,8 +16,8 @@ bevy = { version = "0.15.3", default-features = false, features = [
     "bevy_asset",
     "bevy_core_pipeline",
     "bevy_gizmos",
+    "bevy_pbr",
     "bevy_render",
-    "bevy_sprite",
     "bevy_text",
     "bevy_ui",
     "bevy_winit",
@@ -27,6 +27,7 @@ bevy = { version = "0.15.3", default-features = false, features = [
     "png",
     "x11",
 ] }
+bevy_panorbit_camera = "0.25.0"
 rodio = { version = "0.17", optional = true }
 rand = "0.8"
 

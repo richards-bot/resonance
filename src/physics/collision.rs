@@ -14,7 +14,7 @@ pub struct CollisionEvent {
     pub speed: f32,
 }
 
-/// O(n²) broad+narrow phase collision detection for circle-circle pairs.
+/// O(n²) broad+narrow phase collision detection for sphere-sphere pairs.
 ///
 /// Resolves overlaps positionally and applies elastic impulse response.
 pub fn detect_collisions(
@@ -22,14 +22,14 @@ pub fn detect_collisions(
     mut events: EventWriter<CollisionEvent>,
 ) {
     // Gather snapshot — Bevy prevents two simultaneous mutable query borrows.
-    let particles: Vec<(Entity, Vec2, Vec2, f32, f32, f32)> = query
+    let particles: Vec<(Entity, Vec3, Vec3, f32, f32, f32)> = query
         .iter()
-        .map(|(e, p, t)| (e, t.translation.truncate(), p.velocity, p.radius, p.mass, p.frequency))
+        .map(|(e, p, t)| (e, t.translation, p.velocity, p.radius, p.mass, p.frequency))
         .collect();
 
     let count = particles.len();
-    let mut velocity_deltas: Vec<Vec2> = vec![Vec2::ZERO; count];
-    let mut position_deltas: Vec<Vec2> = vec![Vec2::ZERO; count];
+    let mut velocity_deltas: Vec<Vec3> = vec![Vec3::ZERO; count];
+    let mut position_deltas: Vec<Vec3> = vec![Vec3::ZERO; count];
 
     for i in 0..count {
         for j in (i + 1)..count {
@@ -75,8 +75,7 @@ pub fn detect_collisions(
     for (i, (entity, _, _, _, _, _)) in particles.iter().enumerate() {
         if let Ok((_, mut particle, mut transform)) = query.get_mut(*entity) {
             particle.velocity += velocity_deltas[i];
-            transform.translation.x += position_deltas[i].x;
-            transform.translation.y += position_deltas[i].y;
+            transform.translation += position_deltas[i];
         }
     }
 }

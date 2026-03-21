@@ -2,9 +2,11 @@ use bevy::prelude::*;
 
 use crate::physics::particles::Particle;
 
-/// Draw motion trails and specular highlights using Bevy's immediate-mode Gizmos API.
-pub fn draw_trails(query: Query<(&Particle, &Transform)>, mut gizmos: Gizmos) {
-    for (particle, transform) in &query {
+/// Draw motion trails using Bevy's immediate-mode Gizmos API.
+///
+/// Trails are Vec3 positions — PBR handles specular/emissive highlights on the spheres.
+pub fn draw_trails(query: Query<&Particle>, mut gizmos: Gizmos) {
+    for particle in &query {
         let base_color = particle.color;
         let trail_len = particle.trail.len();
         if trail_len >= 2 {
@@ -13,14 +15,8 @@ pub fn draw_trails(query: Query<(&Particle, &Transform)>, mut gizmos: Gizmos) {
                 let color = base_color.with_alpha(alpha);
                 let from = particle.trail[i];
                 let to = particle.trail[i + 1];
-                gizmos.line_2d(from, to, color);
+                gizmos.line(from, to, color);
             }
         }
-
-        // Specular highlight — small circle offset toward upper-right for 3D sphere illusion
-        let pos = transform.translation.truncate();
-        let highlight_center = pos + Vec2::new(particle.radius * 0.3, particle.radius * 0.3);
-        let highlight_radius = particle.radius * 0.25;
-        gizmos.circle_2d(highlight_center, highlight_radius, Color::srgba(1.0, 1.0, 1.0, 0.5));
     }
 }
