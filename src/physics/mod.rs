@@ -15,10 +15,11 @@ impl Plugin for PhysicsPlugin {
             .add_systems(
                 Update,
                 (
+                    gravity::apply_particle_gravity,
                     gravity::apply_n_body_gravity,
+                    gravity::merge_bodies,
                     collision::detect_collisions,
                     particles::integrate_particles,
-                    gravity::integrate_bodies,
                     particles::despawn_escaped_particles,
                 )
                     .chain(),

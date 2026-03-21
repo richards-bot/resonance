@@ -43,7 +43,7 @@ pub fn setup_hud(mut commands: Commands) {
                     ));
                     col.spawn((
                         Text::new(
-                            "1=Star (max 3)  2=Planet  3=Moon  Esc=None  Space=Debris  C=Clear debris  R=Reset  RClick=Remove body",
+                            "1=Star (max 3)  2=Planet  3=Moon  Esc=None  Space=Debris  C=Clear debris  R=Reset  F=Figure-8  RClick=Remove body",
                         ),
                         TextFont { font_size: 13.0, ..default() },
                         TextColor(Color::srgba(0.6, 0.6, 0.6, 0.7)),

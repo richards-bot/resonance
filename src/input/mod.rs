@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::audio::scale::PENTATONIC_FREQS;
-use crate::physics::bodies::{spawn_moon, spawn_planet, spawn_star, Moon, Planet, Star, Velocity};
+use crate::physics::bodies::{spawn_moon, spawn_planet, spawn_star, spawn_star_at, Moon, Planet, Star, Velocity};
 use crate::physics::particles::{spawn_particles, Particle};
 
 /// Current placement mode — determines what a left click spawns.
@@ -107,6 +107,49 @@ fn keyboard_input(
             commands.entity(entity).despawn();
         }
         *mode = PlacementMode::None;
+    }
+
+    // Chenciner-Montgomery figure-8 three-body solution
+    if keys.just_pressed(KeyCode::KeyF) {
+        for entity in &particles {
+            commands.entity(entity).despawn();
+        }
+        for entity in &planets {
+            commands.entity(entity).despawn();
+        }
+        for entity in &moons {
+            commands.entity(entity).despawn();
+        }
+        for entity in &stars {
+            commands.entity(entity).despawn();
+        }
+        *mode = PlacementMode::None;
+
+        // Scale: positions × 400, velocities × 130
+        spawn_star_at(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            Vec3::new(-0.97000436 * 400.0, 0.24308753 * 400.0, 0.0),
+            Vec3::new(0.46620369 * 130.0, 0.43236573 * 130.0, 0.0),
+            1_000_000.0,
+        );
+        spawn_star_at(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(-0.93240737 * 130.0, -0.86473146 * 130.0, 0.0),
+            1_000_000.0,
+        );
+        spawn_star_at(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            Vec3::new(0.97000436 * 400.0, -0.24308753 * 400.0, 0.0),
+            Vec3::new(0.46620369 * 130.0, 0.43236573 * 130.0, 0.0),
+            1_000_000.0,
+        );
     }
 }
 
