@@ -24,7 +24,7 @@ pub struct Particle {
 const TRAIL_LEN: usize = 8;
 
 /// Boundary half-extents — particles outside this area are removed.
-const BOUNDS: f32 = 900.0;
+const BOUNDS: f32 = 1500.0;
 
 /// Spawn `count` particles at random positions with random velocities.
 ///
@@ -41,8 +41,8 @@ pub fn spawn_particles(
     for _ in 0..count {
         let x = rng.gen_range(-window_half.x * 0.8..window_half.x * 0.8);
         let y = rng.gen_range(-window_half.y * 0.8..window_half.y * 0.8);
-        let vx = rng.gen_range(-120.0..120.0_f32);
-        let vy = rng.gen_range(-120.0..120.0_f32);
+        let vx = rng.gen_range(-350.0..350.0_f32);
+        let vy = rng.gen_range(-350.0..350.0_f32);
         let radius = rng.gen_range(4.0..10.0_f32);
         let mass = radius * radius; // mass proportional to area
         let freq_idx = rng.gen_range(0..frequencies.len());
@@ -80,7 +80,7 @@ pub fn integrate_particles(
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    const DRAG: f32 = 0.985;
+    const DRAG: f32 = 0.993;
 
     for (mut particle, mut transform) in &mut query {
         // Record trail position before moving — O(1) push_back + pop_front

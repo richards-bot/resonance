@@ -9,13 +9,16 @@ pub struct GravityWell {
     pub strength: f32,
 }
 
-/// Minimum distance to avoid singularity in gravity calculation.
-const MIN_DIST: f32 = 20.0;
+/// Global gravitational constant — scales all wells up to pixel-friendly magnitudes.
+const G: f32 = 2_000.0;
+
+/// Minimum distance clamp to prevent singularity blow-up on close approach.
+const MIN_DIST: f32 = 35.0;
 
 /// Apply gravitational attraction from every well to every particle.
 ///
 /// Smaller (less massive) particles accelerate faster — acceleration is
-/// inversely proportional to mass: `accel = well.strength / (dist² × mass)`.
+/// inversely proportional to mass: `accel = G × well.strength / (dist² × mass)`.
 /// Since mass ∝ radius², a particle half the radius accelerates 4× faster.
 pub fn apply_gravity(
     wells: Query<(&Transform, &GravityWell)>,
@@ -31,8 +34,9 @@ pub fn apply_gravity(
             let w_pos = w_transform.translation.truncate();
             let delta = w_pos - p_pos;
             let dist = delta.length().max(MIN_DIST);
-            // Divide by mass so lighter (smaller) particles pull in faster
-            let accel = delta.normalize() * well.strength / (dist * dist * particle.mass);
+            // G scales up the force to compensate for pixel-scale distances
+            // Dividing by mass means smaller particles pull in faster
+            let accel = delta.normalize() * G * well.strength / (dist * dist * particle.mass);
             particle.velocity += accel * dt;
         }
     }
