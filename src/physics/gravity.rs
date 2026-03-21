@@ -23,16 +23,16 @@ const MIN_DIST: f32 = 50.0;
 /// Apply gravitational attraction from large particles (radius > 45) to all other particles.
 ///
 /// Large particles act as mini gravity wells with `effective_strength = mass × 0.15`.
-/// We snapshot large-particle positions first to avoid borrow conflicts.
+/// Uses a single mutable query: collect source data first (immutable pass), then apply forces
+/// (mutable pass) — avoids the Bevy B0001 conflicting-query panic.
 pub fn apply_particle_gravity(
-    source_query: Query<(Entity, &Particle, &Transform)>,
-    mut target_query: Query<(Entity, &mut Particle, &Transform)>,
+    mut particles: Query<(Entity, &mut Particle, &Transform)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
 
-    // Collect large-particle data to avoid aliasing issues with the mutable borrow below
-    let sources: Vec<(Entity, Vec3, f32)> = source_query
+    // Immutable pass: snapshot large-particle positions and strengths
+    let sources: Vec<(Entity, Vec3, f32)> = particles
         .iter()
         .filter(|(_, p, _)| p.radius > LARGE_RADIUS)
         .map(|(e, p, t)| (e, t.translation, p.mass * 0.15))
@@ -42,12 +42,12 @@ pub fn apply_particle_gravity(
         return;
     }
 
-    for (target_entity, mut particle, p_transform) in &mut target_query {
+    // Mutable pass: apply forces to all particles (skip self)
+    for (target_entity, mut particle, p_transform) in &mut particles {
         let p_pos = p_transform.translation;
         let effective_mass = particle.mass.min(200.0);
 
         for (src_entity, src_pos, strength) in &sources {
-            // Do not apply a particle's own gravity to itself
             if *src_entity == target_entity {
                 continue;
             }
