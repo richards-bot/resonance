@@ -15,6 +15,7 @@ impl Plugin for PhysicsPlugin {
                 Update,
                 (
                     gravity::apply_gravity,
+                    gravity::apply_particle_gravity,
                     collision::detect_collisions,
                     particles::integrate_particles,
                     particles::despawn_escaped_particles,

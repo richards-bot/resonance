@@ -43,27 +43,30 @@ pub fn spawn_particles(
         let x = rng.gen_range(-window_half.x * 0.8..window_half.x * 0.8);
         let y = rng.gen_range(-window_half.y * 0.8..window_half.y * 0.8);
         let z = rng.gen_range(-window_half.y * 0.8..window_half.y * 0.8);
-        let vx = rng.gen_range(-350.0..350.0_f32);
-        let vy = rng.gen_range(-350.0..350.0_f32);
-        let vz = rng.gen_range(-350.0..350.0_f32);
-        let radius = rng.gen_range(12.0..32.0_f32);
+        let vx = rng.gen_range(-150.0..150.0_f32);
+        let vy = rng.gen_range(-150.0..150.0_f32);
+        let vz = rng.gen_range(-150.0..150.0_f32);
+        let radius = rng.gen_range(8.0..80.0_f32);
         let mass = radius * radius; // mass proportional to area
         let freq_idx = rng.gen_range(0..frequencies.len());
         let frequency = frequencies[freq_idx];
 
-        // Map frequency to hue: low=blue (240°), high=red (0°)
-        let freq_min = 220.0_f32;
-        let freq_max = 1760.0_f32;
-        let t = ((frequency - freq_min) / (freq_max - freq_min)).clamp(0.0, 1.0);
-        let hue = (1.0 - t) * 240.0;
-        let color = Color::hsl(hue, 0.9, 0.65);
+        // Pick one of 5 distinct colours at random
+        const PALETTE: [Color; 5] = [
+            Color::hsl(5.0, 0.85, 0.60),   // coral red
+            Color::hsl(38.0, 0.90, 0.58),  // amber
+            Color::hsl(175.0, 0.75, 0.52), // teal
+            Color::hsl(270.0, 0.70, 0.62), // violet
+            Color::hsl(100.0, 0.70, 0.52), // lime
+        ];
+        let color = PALETTE[rng.gen_range(0..PALETTE.len())];
 
         let mesh = meshes.add(Sphere::new(radius));
         let material = materials.add(StandardMaterial {
             base_color: color,
-            metallic: 0.3,
-            perceptual_roughness: 0.4,
-            emissive: color.to_linear() * 0.6,
+            metallic: 0.1,
+            perceptual_roughness: 0.5,
+            emissive: color.to_linear() * 0.05,
             ..default()
         });
 
@@ -83,13 +86,12 @@ pub fn spawn_particles(
     }
 }
 
-/// Semi-implicit Euler integration: apply velocity, apply drag, update trail.
+/// Semi-implicit Euler integration: apply velocity, update trail.
 pub fn integrate_particles(
     mut query: Query<(&mut Particle, &mut Transform)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    const DRAG: f32 = 0.993;
 
     for (mut particle, mut transform) in &mut query {
         // Record trail position before moving — O(1) push_back + pop_front
@@ -100,9 +102,6 @@ pub fn integrate_particles(
 
         // Integrate position
         transform.translation += particle.velocity * dt;
-
-        // Linear drag
-        particle.velocity *= DRAG;
     }
 }
 

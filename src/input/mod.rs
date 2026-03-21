@@ -202,7 +202,7 @@ fn scroll_well_gravity(
                 if shift {
                     well.influence_radius = (well.influence_radius + delta_y * 30.0).clamp(0.0, 1500.0);
                 } else {
-                    well.strength = (well.strength + delta_y * 2000.0).clamp(0.0, 200_000.0);
+                    well.strength = (well.strength + delta_y * 5000.0).clamp(0.0, 200_000.0);
                 }
                 near_well = true;
             }
