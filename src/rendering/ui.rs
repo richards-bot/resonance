@@ -1,14 +1,10 @@
 use bevy::prelude::*;
 
-use crate::physics::particles::{GravityStrength, Particle};
+use crate::physics::particles::Particle;
 
 /// Marker for the particle count text node.
 #[derive(Component)]
 pub struct ParticleCountText;
-
-/// Marker for the gravity strength text node.
-#[derive(Component)]
-pub struct GravityStrengthText;
 
 /// Spawn the HUD text nodes.
 pub fn setup_hud(mut commands: Commands) {
@@ -40,21 +36,12 @@ pub fn setup_hud(mut commands: Commands) {
                         TextColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
                         ParticleCountText,
                     ));
-                    col.spawn((
-                        Text::new("Gravity: 500"),
-                        TextFont {
-                            font_size: 18.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgba(0.7, 0.9, 1.0, 0.85)),
-                        GravityStrengthText,
-                    ));
                 });
 
             // Bottom controls hint
             parent.spawn((
                 Text::new(
-                    "Space: spawn  C: clear  R: reset  +/-: gravity  LClick: well  RClick: remove well",
+                    "Space: spawn  C: clear  R: reset  LClick: well  RClick: remove well  Scroll: well gravity",
                 ),
                 TextFont {
                     font_size: 13.0,
@@ -68,17 +55,10 @@ pub fn setup_hud(mut commands: Commands) {
 /// Update the particle count display each frame.
 pub fn update_hud(
     particles: Query<(), With<Particle>>,
-    mut count_text: Query<&mut Text, (With<ParticleCountText>, Without<GravityStrengthText>)>,
-    mut gravity_text: Query<&mut Text, (With<GravityStrengthText>, Without<ParticleCountText>)>,
-    gravity: Res<GravityStrength>,
+    mut count_text: Query<&mut Text, With<ParticleCountText>>,
 ) {
     let count = particles.iter().count();
     if let Ok(mut text) = count_text.get_single_mut() {
         **text = format!("Particles: {}", count);
-    }
-    if gravity.is_changed() {
-        if let Ok(mut text) = gravity_text.get_single_mut() {
-            **text = format!("Gravity: {:.0}", gravity.0);
-        }
     }
 }

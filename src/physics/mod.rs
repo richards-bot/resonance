@@ -9,8 +9,7 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(particles::GravityStrength(500.0))
-            .add_event::<collision::CollisionEvent>()
+        app.add_event::<collision::CollisionEvent>()
             .add_systems(Startup, particles::setup_camera)
             .add_systems(
                 Update,

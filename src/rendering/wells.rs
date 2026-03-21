@@ -6,6 +6,8 @@ use crate::physics::gravity::GravityWell;
 const PULSE_PERIOD: f32 = 1.5;
 
 /// Animate gravity well rings — pulsing radius drawn via gizmos.
+///
+/// Outer ring scales with well strength so stronger wells have a bigger visual footprint.
 pub fn animate_wells(
     query: Query<(&Transform, &GravityWell)>,
     mut gizmos: Gizmos,
@@ -13,7 +15,7 @@ pub fn animate_wells(
 ) {
     let t = time.elapsed_secs();
 
-    for (transform, _well) in &query {
+    for (transform, well) in &query {
         let pos = transform.translation.truncate();
         let pulse = ((t / PULSE_PERIOD) * std::f32::consts::TAU).sin() * 0.5 + 0.5;
 
@@ -21,8 +23,9 @@ pub fn animate_wells(
         let inner_r = 12.0 + pulse * 4.0;
         gizmos.circle_2d(pos, inner_r, Color::srgba(0.4, 0.8, 1.0, 0.7));
 
-        // Outer influence ring
-        let outer_r = 28.0 + pulse * 8.0;
+        // Outer influence ring — scales with well strength
+        let base_outer = 20.0 + (well.strength / 200_000.0_f32).sqrt() * 60.0;
+        let outer_r = base_outer + pulse * 8.0;
         gizmos.circle_2d(pos, outer_r, Color::srgba(0.4, 0.8, 1.0, 0.2));
     }
 }

@@ -15,7 +15,8 @@ Rust + Bevy particle physics sonification engine. Read `openspec/project.md` for
 
 ## Checkpoints
 
-Commit after each major milestone:
+After each major milestone: `git add -A && git commit -m "checkpoint: ..." && git push`. Always push immediately after committing.
+
 1. `checkpoint: project scaffolded, bevy hello world runs`
 2. `checkpoint: particles spawning and rendering`
 3. `checkpoint: gravity wells + physics working`

@@ -3,10 +3,6 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 use rand::Rng;
 
-/// Global gravity well strength multiplier.
-#[derive(Resource)]
-pub struct GravityStrength(pub f32);
-
 /// A simulated particle with position, velocity, radius, and mass.
 #[derive(Component)]
 pub struct Particle {
@@ -20,6 +16,8 @@ pub struct Particle {
     pub frequency: f32,
     /// Trail history — ring buffer of recent world positions (oldest first).
     pub trail: VecDeque<Vec2>,
+    /// Particle color derived from frequency at spawn.
+    pub color: Color,
 }
 
 /// Maximum number of trail positions retained per particle.
@@ -29,8 +27,12 @@ const TRAIL_LEN: usize = 8;
 const BOUNDS: f32 = 900.0;
 
 /// Spawn `count` particles at random positions with random velocities.
+///
+/// Uses `Mesh2d` + `MeshMaterial2d<ColorMaterial>` with a `Circle` mesh for round rendering.
 pub fn spawn_particles(
     commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
     count: usize,
     window_half: Vec2,
     frequencies: &[f32],
@@ -53,6 +55,9 @@ pub fn spawn_particles(
         let hue = (1.0 - t) * 240.0;
         let color = Color::hsl(hue, 0.9, 0.65);
 
+        let mesh = meshes.add(Circle::new(radius));
+        let material = materials.add(ColorMaterial::from_color(color));
+
         commands.spawn((
             Particle {
                 velocity: Vec2::new(vx, vy),
@@ -60,12 +65,10 @@ pub fn spawn_particles(
                 mass,
                 frequency,
                 trail: VecDeque::with_capacity(TRAIL_LEN + 1),
-            },
-            Sprite {
                 color,
-                custom_size: Some(Vec2::splat(radius * 2.0)),
-                ..default()
             },
+            Mesh2d(mesh),
+            MeshMaterial2d(material),
             Transform::from_xyz(x, y, 1.0),
         ));
     }

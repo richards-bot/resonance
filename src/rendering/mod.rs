@@ -14,7 +14,6 @@ impl Plugin for RenderingPlugin {
             .add_systems(
                 Update,
                 (
-                    particles::update_particle_visuals,
                     particles::draw_trails,
                     wells::animate_wells,
                     ui::update_hud,
