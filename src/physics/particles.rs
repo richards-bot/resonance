@@ -46,7 +46,7 @@ pub fn spawn_particles(
         let vx = rng.gen_range(-350.0..350.0_f32);
         let vy = rng.gen_range(-350.0..350.0_f32);
         let vz = rng.gen_range(-350.0..350.0_f32);
-        let radius = rng.gen_range(4.0..10.0_f32);
+        let radius = rng.gen_range(12.0..32.0_f32);
         let mass = radius * radius; // mass proportional to area
         let freq_idx = rng.gen_range(0..frequencies.len());
         let frequency = frequencies[freq_idx];
@@ -63,7 +63,7 @@ pub fn spawn_particles(
             base_color: color,
             metallic: 0.3,
             perceptual_roughness: 0.4,
-            emissive: color.to_linear() * 0.15,
+            emissive: color.to_linear() * 0.6,
             ..default()
         });
 

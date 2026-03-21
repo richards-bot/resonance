@@ -1,6 +1,7 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use bevy_panorbit_camera::PanOrbitCamera;
 
 use crate::audio::scale::PENTATONIC_FREQS;
 use crate::physics::gravity::GravityWell;
@@ -93,6 +94,7 @@ fn mouse_input(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     wells: Query<(Entity, &Transform), With<GravityWell>>,
     placement_depth: Res<PlacementDepth>,
+    mut camera_pan_orbit: Query<&mut PanOrbitCamera>,
 ) {
     let Ok(win) = window.get_single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
@@ -117,13 +119,16 @@ fn mouse_input(
         for (entity, transform) in &wells {
             if transform.translation.distance(world_pos) < 50.0 {
                 commands.entity(entity).insert(Dragging);
+                if let Ok(mut pan_orbit) = camera_pan_orbit.get_single_mut() {
+                    pan_orbit.enabled = false;
+                }
                 return;
             }
         }
 
         // Spawn a new well at the current placement depth
         commands.spawn((
-            GravityWell { strength: 3000.0 },
+            GravityWell { strength: 3000.0, influence_radius: 0.0 },
             Transform::from_xyz(world_pos.x, world_pos.y, placement_depth.0),
             GlobalTransform::default(),
             Visibility::Visible,
@@ -134,6 +139,9 @@ fn mouse_input(
     if mouse.just_released(MouseButton::Left) {
         for (entity, _) in &wells {
             commands.entity(entity).remove::<Dragging>();
+        }
+        if let Ok(mut pan_orbit) = camera_pan_orbit.get_single_mut() {
+            pan_orbit.enabled = true;
         }
     }
 }
@@ -158,10 +166,11 @@ fn drag_wells(
     }
 }
 
-/// Scroll near a well to adjust its gravity strength.
+/// Scroll near a well to adjust its gravity strength (or Shift+scroll to resize influence radius).
 /// Scroll away from all wells to adjust the placement depth for the next well.
 ///
 /// Strength is clamped to `[0.0, 200_000.0]`, step = scroll_y × 2000.
+/// Influence radius is clamped to `[0.0, 1500.0]`, step = scroll_y × 30.
 /// Placement depth is clamped to `[-800.0, 800.0]`, step = scroll_y × 20.
 fn scroll_well_gravity(
     mut scroll_events: EventReader<MouseWheel>,
@@ -169,6 +178,7 @@ fn scroll_well_gravity(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut wells: Query<(&Transform, &mut GravityWell)>,
     mut placement_depth: ResMut<PlacementDepth>,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
     let Ok(win) = window.get_single() else { return };
     let Some(cursor) = win.cursor_position() else { return };
@@ -177,6 +187,8 @@ fn scroll_well_gravity(
     let Some(world_pos) = ray_to_plane_z(camera, cam_transform, cursor, placement_depth.0) else {
         return;
     };
+
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
 
     for event in scroll_events.read() {
         let delta_y = match event.unit {
@@ -187,7 +199,11 @@ fn scroll_well_gravity(
         let mut near_well = false;
         for (transform, mut well) in &mut wells {
             if transform.translation.distance(world_pos) < 60.0 {
-                well.strength = (well.strength + delta_y * 2000.0).clamp(0.0, 200_000.0);
+                if shift {
+                    well.influence_radius = (well.influence_radius + delta_y * 30.0).clamp(0.0, 1500.0);
+                } else {
+                    well.strength = (well.strength + delta_y * 2000.0).clamp(0.0, 200_000.0);
+                }
                 near_well = true;
             }
         }

@@ -7,6 +7,8 @@ use super::particles::Particle;
 pub struct GravityWell {
     /// Absolute gravity strength in world units per second² at unit distance.
     pub strength: f32,
+    /// Maximum influence radius in world units. `0.0` means infinite influence.
+    pub influence_radius: f32,
 }
 
 /// Global gravitational constant — scales all wells up to pixel-friendly magnitudes.
@@ -34,6 +36,9 @@ pub fn apply_gravity(
             let w_pos = w_transform.translation;
             let delta = w_pos - p_pos;
             let dist = delta.length().max(MIN_DIST);
+            if well.influence_radius > 0.0 && dist > well.influence_radius {
+                continue;
+            }
             // G scales up the force to compensate for pixel-scale distances
             // Dividing by mass means smaller particles pull in faster
             let accel = delta.normalize() * G * well.strength / (dist * dist * particle.mass);

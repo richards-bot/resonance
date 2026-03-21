@@ -41,7 +41,7 @@ pub fn setup_hud(mut commands: Commands) {
             // Bottom controls hint
             parent.spawn((
                 Text::new(
-                    "Space: spawn  C: clear  R: reset  LClick: place well  RClick: remove well  Scroll on well: gravity  Scroll: placement depth  LDrag: orbit  RDrag: pan",
+                    "Space: spawn  C: clear  R: reset  LClick: place well  RClick: remove well  Scroll on well: gravity  Shift+scroll on well: resize  Scroll elsewhere: depth  Left-drag: orbit  Right-drag: pan  Scroll: zoom",
                 ),
                 TextFont {
                     font_size: 13.0,

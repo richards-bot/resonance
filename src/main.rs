@@ -33,11 +33,15 @@ fn main() {
 fn setup_lighting(mut commands: Commands) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 80.0,
+        brightness: 400.0,
     });
     commands.spawn(DirectionalLight {
-        illuminance: 8000.0,
+        illuminance: 20_000.0,
         shadows_enabled: false,
         ..default()
     });
+    commands.spawn((
+        DirectionalLight { illuminance: 8_000.0, shadows_enabled: false, ..default() },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -2.0, 1.0, 0.0)),
+    ));
 }

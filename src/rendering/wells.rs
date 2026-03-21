@@ -51,5 +51,22 @@ pub fn animate_wells(
             outer_r,
             color2,
         );
+
+        // Influence radius boundary ring — shown only when a finite radius is set
+        if well.influence_radius > 0.0 {
+            let ir = well.influence_radius;
+            let color3 = Color::srgba(1.0, 0.5, 0.2, 0.15);
+            gizmos.circle(Isometry3d::new(pos, Quat::IDENTITY), ir, color3);
+            gizmos.circle(
+                Isometry3d::new(pos, Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                ir,
+                color3,
+            );
+            gizmos.circle(
+                Isometry3d::new(pos, Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
+                ir,
+                color3,
+            );
+        }
     }
 }
