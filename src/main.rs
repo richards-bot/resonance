@@ -29,25 +29,10 @@ fn main() {
         .run();
 }
 
-/// Spawn ambient and directional lights for PBR rendering.
+/// Spawn ambient light; per-star PointLights are spawned as star children.
 fn setup_lighting(mut commands: Commands) {
-    // Low ambient so directional lights create visible shading on sphere surfaces
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 80.0,
+        brightness: 50.0,
     });
-    // Key light — main shading source
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 25_000.0,
-            shadows_enabled: false,
-            ..default()
-        },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.8, 0.0)),
-    ));
-    // Fill light — softer, opposite side to prevent pure-black shadows
-    commands.spawn((
-        DirectionalLight { illuminance: 6_000.0, shadows_enabled: false, ..default() },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.5, -1.5, 0.0)),
-    ));
 }

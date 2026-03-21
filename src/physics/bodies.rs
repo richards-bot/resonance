@@ -45,6 +45,7 @@ pub struct Planet {
     /// Gravitational mass derived from radius.
     pub mass: f32,
     /// Human-readable name assigned at spawn.
+    #[allow(dead_code)]
     pub name: String,
 }
 
@@ -54,7 +55,10 @@ pub struct Moon {
     /// Gravitational mass derived from radius.
     pub mass: f32,
     /// The planet entity this moon orbits.
+    #[allow(dead_code)]
     pub parent_planet: Entity,
+    /// Expected orbital distance from parent planet (set at spawn time).
+    pub expected_dist: f32,
 }
 
 /// Five-colour palette shared by Particle and Planet.
@@ -69,11 +73,12 @@ const PLANET_PALETTE: [Color; 5] = [
 const PLANET_NAMES: [&str; 8] =
     ["Aether", "Borea", "Calos", "Dusk", "Ember", "Frost", "Gale", "Haze"];
 
-/// Spawn the star at the world origin (position ignored — always placed at 0,0,0).
+/// Spawn a star at `position` with a child `PointLight` for realistic light falloff.
 pub fn spawn_star(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    position: Vec3,
 ) {
     let radius = 60.0_f32;
     let mesh = meshes.add(Sphere::new(radius));
@@ -84,12 +89,27 @@ pub fn spawn_star(
         perceptual_roughness: 0.2,
         ..default()
     });
-    commands.spawn((
+
+    let star_entity = commands.spawn((
         Star { mass: 1_000_000.0 },
+        Velocity(Vec3::ZERO),
         Mesh3d(mesh),
         MeshMaterial3d(material),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-    ));
+        Transform::from_xyz(position.x, position.y, position.z),
+    )).id();
+
+    commands.entity(star_entity).with_children(|parent| {
+        parent.spawn((
+            PointLight {
+                intensity: 50_000_000.0,
+                range: 5000.0,
+                shadows_enabled: true,
+                color: Color::srgb(1.0, 0.97, 0.85),
+                ..default()
+            },
+            Transform::default(),
+        ));
+    });
 }
 
 /// Spawn a planet at `position` with a computed circular orbital velocity around the star.
@@ -153,9 +173,10 @@ pub fn spawn_moon(
     let mass = radius * radius;
     let color = Color::srgb(0.75, 0.75, 0.78);
 
-    // Orbital velocity around parent planet
+    // Orbital velocity around parent planet (relative — planet_velocity added for world-space motion)
     let delta = Vec2::new(position.x - planet_pos.x, position.y - planet_pos.y);
     let r = delta.length().max(1.0);
+    let expected_dist = r;
     let v_orbital = (G * planet_mass / r).sqrt();
     let dir = Vec2::new(-delta.y, delta.x).normalize();
     let velocity = planet_velocity + Vec3::new(dir.x * v_orbital, dir.y * v_orbital, 0.0);
@@ -169,7 +190,7 @@ pub fn spawn_moon(
     });
 
     commands.spawn((
-        Moon { mass, parent_planet: planet_entity },
+        Moon { mass, parent_planet: planet_entity, expected_dist },
         Velocity(velocity),
         Trail::new(color, 30),
         Mesh3d(mesh),

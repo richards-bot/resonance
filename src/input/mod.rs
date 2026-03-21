@@ -157,11 +157,10 @@ fn mouse_input(
 
     match *mode {
         PlacementMode::Star => {
-            // Despawn existing star, then place new one at origin
-            for (entity, _, _) in &stars {
-                commands.entity(entity).despawn();
+            // Allow up to 3 coexisting stars for n-body / 3-body problem scenarios
+            if stars.iter().count() < 3 {
+                spawn_star(&mut commands, &mut meshes, &mut materials, world_pos);
             }
-            spawn_star(&mut commands, &mut meshes, &mut materials);
         }
         PlacementMode::Planet => {
             let star_mass =
