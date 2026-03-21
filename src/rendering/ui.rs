@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::input::PlacementMode;
 use crate::physics::bodies::{Moon, Planet, Star};
 use crate::physics::particles::Particle;
+use crate::physics::SimulationMode;
 
 /// Marker for the dynamic info text node (mode + body counts).
 #[derive(Component)]
@@ -55,6 +56,7 @@ pub fn setup_hud(mut commands: Commands) {
 /// Update the dynamic HUD info text each frame.
 pub fn update_hud(
     mode: Res<PlacementMode>,
+    sim_mode: Res<SimulationMode>,
     particles: Query<(), With<Particle>>,
     planets: Query<(), With<Planet>>,
     moons: Query<(), With<Moon>>,
@@ -73,10 +75,16 @@ pub fn update_hud(
     let moon_count = moons.iter().count();
     let debris_count = particles.iter().count();
 
+    let three_body_notice = if *sim_mode == SimulationMode::ThreeBody {
+        "  |  [!] 3-BODY MODE (no merging)"
+    } else {
+        ""
+    };
+
     if let Ok(mut text) = info_text.get_single_mut() {
         **text = format!(
-            "Mode: {}  |  Star: {}  Planets: {}  Moons: {}  Debris: {}",
-            mode_str, star_count, planet_count, moon_count, debris_count
+            "Mode: {}  |  Star: {}  Planets: {}  Moons: {}  Debris: {}{}",
+            mode_str, star_count, planet_count, moon_count, debris_count, three_body_notice
         );
     }
 }

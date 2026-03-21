@@ -5,6 +5,7 @@ use bevy::window::PrimaryWindow;
 use crate::audio::scale::PENTATONIC_FREQS;
 use crate::physics::bodies::{spawn_moon, spawn_planet, spawn_star, spawn_star_at, Moon, Planet, Star, Velocity};
 use crate::physics::particles::{spawn_particles, Particle};
+use crate::physics::SimulationMode;
 
 /// Current placement mode — determines what a left click spawns.
 #[derive(Resource, Default, PartialEq, Debug, Clone, Copy)]
@@ -21,10 +22,8 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PlacementMode>().add_systems(
-            Update,
-            (keyboard_input, mouse_input, scroll_input),
-        );
+        app.init_resource::<PlacementMode>()
+            .add_systems(Update, (keyboard_input, mouse_input, scroll_input));
     }
 }
 
@@ -59,6 +58,7 @@ fn keyboard_input(
     mut materials: ResMut<Assets<StandardMaterial>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut mode: ResMut<PlacementMode>,
+    mut sim_mode: ResMut<SimulationMode>,
     particles: Query<Entity, With<Particle>>,
     planets: Query<Entity, With<Planet>>,
     moons: Query<Entity, With<Moon>>,
@@ -107,6 +107,7 @@ fn keyboard_input(
             commands.entity(entity).despawn();
         }
         *mode = PlacementMode::None;
+        *sim_mode = SimulationMode::Normal;
     }
 
     // Chenciner-Montgomery figure-8 three-body solution
@@ -124,14 +125,21 @@ fn keyboard_input(
             commands.entity(entity).despawn();
         }
         *mode = PlacementMode::None;
+        *sim_mode = SimulationMode::ThreeBody;
 
-        // Scale: positions × 400, velocities × 130
+        // Calibrated initial conditions for G=500, mass=1_000_000.
+        // v_scale = sqrt(G * mass / pos_scale) = sqrt(500 * 1_000_000 / 400) ≈ 1118
+        // Positions scaled by pos_scale × 0.8 for visual clarity.
+        // Velocities scaled by v_scale × 0.6 for a slower, more readable figure-8.
+        let pos_scale = 400.0_f32 * 0.8;
+        let v_scale = (500.0_f32 * 1_000_000.0_f32 / 400.0_f32).sqrt() * 0.6;
+
         spawn_star_at(
             &mut commands,
             &mut meshes,
             &mut materials,
-            Vec3::new(-0.97000436 * 400.0, 0.24308753 * 400.0, 0.0),
-            Vec3::new(0.46620369 * 130.0, 0.43236573 * 130.0, 0.0),
+            Vec3::new(-0.97000436 * pos_scale, 0.24308753 * pos_scale, 0.0),
+            Vec3::new(0.46620369 * v_scale, 0.43236573 * v_scale, 0.0),
             1_000_000.0,
         );
         spawn_star_at(
@@ -139,15 +147,15 @@ fn keyboard_input(
             &mut meshes,
             &mut materials,
             Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(-0.93240737 * 130.0, -0.86473146 * 130.0, 0.0),
+            Vec3::new(-0.93240737 * v_scale, -0.86473146 * v_scale, 0.0),
             1_000_000.0,
         );
         spawn_star_at(
             &mut commands,
             &mut meshes,
             &mut materials,
-            Vec3::new(0.97000436 * 400.0, -0.24308753 * 400.0, 0.0),
-            Vec3::new(0.46620369 * 130.0, 0.43236573 * 130.0, 0.0),
+            Vec3::new(0.97000436 * pos_scale, -0.24308753 * pos_scale, 0.0),
+            Vec3::new(0.46620369 * v_scale, 0.43236573 * v_scale, 0.0),
             1_000_000.0,
         );
     }

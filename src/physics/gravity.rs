@@ -2,16 +2,21 @@ use bevy::prelude::*;
 
 use super::bodies::{spawn_star_at, Moon, Planet, Star, Trail, Velocity, G};
 use super::particles::Particle;
+use super::SimulationMode;
 
-/// Minimum distance clamp to prevent singularity blow-up on close approach.
+/// Minimum distance clamp for debris particles.
 const MIN_DIST: f32 = 40.0;
+/// Minimum distance clamp for star-star interactions (point masses).
+const MIN_DIST_STAR: f32 = 8.0;
+/// Minimum distance clamp for star-planet and planet-planet interactions.
+const MIN_DIST_BODY: f32 = 20.0;
 
 /// Compute gravitational acceleration on body at `pos_i` from all other bodies.
-fn compute_accel(pos_i: Vec3, _mass_i: f32, others: &[(Vec3, f32)]) -> Vec3 {
+fn compute_accel(pos_i: Vec3, others: &[(Vec3, f32)], min_dist: f32) -> Vec3 {
     let mut accel = Vec3::ZERO;
     for (pos_j, mass_j) in others {
         let delta = *pos_j - pos_i;
-        let dist = delta.length().max(MIN_DIST);
+        let dist = delta.length().max(min_dist);
         accel += delta.normalize() * G * mass_j / (dist * dist);
     }
     accel
@@ -22,6 +27,7 @@ fn compute_accel(pos_i: Vec3, _mass_i: f32, others: &[(Vec3, f32)]) -> Vec3 {
 /// Integrates both velocity and position in a single step using 4th-order Runge-Kutta.
 /// Each body's acceleration uses a snapshot of all other bodies' starting positions,
 /// which is the standard decoupled-RK4 approach for N-body systems.
+/// In `ThreeBody` mode the timestep is halved for better numerical accuracy.
 pub fn apply_n_body_gravity(
     mut body_q: Query<
         (
@@ -36,8 +42,10 @@ pub fn apply_n_body_gravity(
         Or<(With<Star>, With<Planet>, With<Moon>)>,
     >,
     time: Res<Time>,
+    sim_mode: Res<SimulationMode>,
 ) {
-    let dt = time.delta_secs();
+    let dt = time.delta_secs()
+        * if *sim_mode == SimulationMode::ThreeBody { 0.5 } else { 1.0 };
 
     // Snapshot all body states (iter() gives read-only access even on a mut query)
     struct BodyState {
@@ -45,20 +53,27 @@ pub fn apply_n_body_gravity(
         pos: Vec3,
         vel: Vec3,
         mass: f32,
+        is_star: bool,
     }
 
     let snapshots: Vec<BodyState> = body_q
         .iter()
         .filter_map(|(entity, transform, vel, star, planet, moon, _)| {
-            let mass = star
-                .map(|s| s.mass)
-                .or_else(|| planet.map(|p| p.mass))
-                .or_else(|| moon.map(|m| m.mass))?;
+            let (mass, is_star) = if let Some(s) = star {
+                (s.mass, true)
+            } else if let Some(p) = planet {
+                (p.mass, false)
+            } else if let Some(m) = moon {
+                (m.mass, false)
+            } else {
+                return None;
+            };
             Some(BodyState {
                 entity,
                 pos: transform.translation,
                 vel: vel.0,
                 mass,
+                is_star,
             })
         })
         .collect();
@@ -79,20 +94,22 @@ pub fn apply_n_body_gravity(
                 .map(|b| (b.pos, b.mass))
                 .collect();
 
+            // Stars are treated as point masses; use tighter clamp
+            let min_dist = if body.is_star { MIN_DIST_STAR } else { MIN_DIST_BODY };
+
             let pos = body.pos;
             let vel = body.vel;
-            let mass = body.mass;
 
-            let k1_v = compute_accel(pos, mass, &others);
+            let k1_v = compute_accel(pos, &others, min_dist);
             let k1_x = vel;
 
-            let k2_v = compute_accel(pos + k1_x * dt / 2.0, mass, &others);
+            let k2_v = compute_accel(pos + k1_x * dt / 2.0, &others, min_dist);
             let k2_x = vel + k1_v * dt / 2.0;
 
-            let k3_v = compute_accel(pos + k2_x * dt / 2.0, mass, &others);
+            let k3_v = compute_accel(pos + k2_x * dt / 2.0, &others, min_dist);
             let k3_x = vel + k2_v * dt / 2.0;
 
-            let k4_v = compute_accel(pos + k3_x * dt, mass, &others);
+            let k4_v = compute_accel(pos + k3_x * dt, &others, min_dist);
             let k4_x = vel + k3_v * dt;
 
             let new_vel = vel + (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v) * dt / 6.0;
@@ -184,36 +201,37 @@ pub fn merge_bodies(
     let mut bodies: Vec<BodySnap> = Vec::new();
 
     for (e, t, v, s) in &stars {
+        // Stars are point masses for physics; use a small collision radius
         bodies.push(BodySnap {
             entity: e,
             pos: t.translation,
             vel: v.0,
             mass: s.mass,
-            radius: 60.0,
+            radius: 15.0,
             kind: MergeKind::Star,
             moon_parent: None,
         });
     }
     for (e, t, v, p) in &planets {
-        let radius = (p.mass * 100.0_f32).cbrt();
+        let visual_radius = (p.mass * 100.0_f32).cbrt();
         bodies.push(BodySnap {
             entity: e,
             pos: t.translation,
             vel: v.0,
             mass: p.mass,
-            radius,
+            radius: visual_radius * 0.5,
             kind: MergeKind::Planet,
             moon_parent: None,
         });
     }
     for (e, t, v, m) in &moons {
-        let radius = m.mass.sqrt();
+        let visual_radius = m.mass.sqrt();
         bodies.push(BodySnap {
             entity: e,
             pos: t.translation,
             vel: v.0,
             mass: m.mass,
-            radius,
+            radius: visual_radius * 0.5,
             kind: MergeKind::Moon,
             moon_parent: Some(m.parent_planet),
         });
